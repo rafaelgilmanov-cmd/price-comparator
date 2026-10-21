@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Сравнитель цен — по умолчанию 100г</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f4f8;
+            margin: 0;
+            padding: 6px;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.2rem;
+            margin: 0 0 2px 0;
+            color: #1e2a3a;
+        }
+        .sub {
+            font-size: 0.65rem;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            border-left: 3px solid #ff9800;
+            padding-left: 8px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 6px;
+            margin-bottom: 10px;
+        }
+        .row {
+            background: #fff;
+            border-radius: 10px;
+            padding: 6px;
+            margin-bottom: 6px;
+            border: 1px solid #e2e8f0;
+        }
+        .best-price {
+            background: #dcfce7;
+            border-left: 3px solid #22c55e;
+        }
+        .row-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            font-size: 0.6rem;
+            color: #5b6e8c;
+        }
+        .row-number {
+            font-weight: bold;
+            background: #eef2ff;
+            padding: 0px 6px;
+            border-radius: 16px;
+            font-size: 0.65rem;
+        }
+        .delete-row {
+            background: none;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            color: #94a3b8;
+            padding: 0 4px;
+        }
+        .flex-inputs {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 5px;
+            margin-bottom: 6px;
+            align-items: flex-end;
+        }
+        .price-box, .weight-box, .weight-unit-box, .pieces-box {
+            flex: 1;
+            min-width: 0;
+        }
+        .price-box { flex: 1.2; }
+        .weight-box { flex: 1; }
+        .weight-unit-box { flex: 0.8; }
+        .pieces-box { flex: 0.8; }
+        
+        label {
+            font-size: 0.55rem;
+            display: block;
+            color: #475569;
+            margin-bottom: 1px;
+        }
+        input, select {
+            width: 100%;
+            padding: 5px 3px;
+            font-size: 0.8rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: white;
+            font-family: inherit;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #ff9800;
+        }
+        .result {
+            background: #f8fafc;
+            padding: 4px 6px;
+            border-radius: 8px;
+            font-size: 0.65rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 4px;
+        }
+        .result span {
+            font-weight: 500;
+        }
+        .result-value {
+            font-family: monospace;
+            font-weight: bold;
+            color: #1e293b;
+        }
+        button {
+            background: #ff9800;
+            border: none;
+            color: white;
+            font-weight: bold;
+            padding: 6px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 5px;
+        }
+        .button-group {
+            display: flex;
+            gap: 6px;
+            margin-top: 5px;
+        }
+        .button-group button {
+            margin-top: 0;
+            background: #e2e8f0;
+            color: #1e293b;
+            padding: 5px;
+            font-size: 0.7rem;
+        }
+        .button-group button:first-child {
+            background: #ff9800;
+            color: white;
+        }
+        footer {
+            font-size: 0.55rem;
+            text-align: center;
+            color: #5b6e8c;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🧮 Сравнитель цен</h1>
+    <div class="sub">Цена → вес (по умолчанию 100г) → штуки</div>
+
+    <div class="card" id="rowsContainer"></div>
+
+    <button id="addRowBtn">+ Добавить продукт</button>
+    <div class="button-group">
+        <button id="resetAllBtn">🗑 Очистить всё</button>
+        <button id="keepFiveBtn">📋 Оставить 5 строк</button>
+    </div>
+    <footer>✅ Зелёный фон = самая низкая цена за 1кг | 💾 Автосохранение | По умолчанию вес 100г</footer>
+</div>
+
+<script>
+    const MAX_ROWS = 12;
+    let rows = [];
+    const STORAGE_KEY = 'price_compare_default_100g';
+
+    function convertToGrams(quantity, unit) {
+        const unitLower = unit.toLowerCase();
+        if (unitLower === 'г') return quantity * 1;
+        if (unitLower === 'кг') return quantity * 1000;
+        if (unitLower === 'мл') return quantity * 1;
+        if (unitLower === 'л' || unitLower === 'литр') return quantity * 1000;
+        return null;
+    }
+
+    function saveToStorage() {
+        const data = [];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const price = row.querySelector('.price-input')?.value || '';
+            const weightQty = row.querySelector('.weight-qty')?.value || '';
+            const weightUnit = row.querySelector('.weight-unit')?.value || 'г';
+            const piecesQty = row.querySelector('.pieces-qty')?.value || '';
+            data.push({ price, weightQty, weightUnit, piecesQty });
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function loadFromStorage() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return null;
+        try {
+            return JSON.parse(saved);
+        } catch(e) { return null; }
+    }
+
+    function updateAllResults() {
+        const results = [];
+
+        rows.forEach(row => {
+            const priceInput = row.querySelector('.price-input');
+            const weightQtyInput = row.querySelector('.weight-qty');
+            const weightUnitSelect = row.querySelector('.weight-unit');
+            const piecesQtyInput = row.querySelector('.pieces-qty');
+            
+            const resultPerGramSpan = row.querySelector('.result-per-gram');
+            const resultPerKgSpan = row.querySelector('.result-per-kg');
+            const resultPerPieceSpan = row.querySelector('.result-per-piece');
+
+            let price = priceInput?.value === '' ? NaN : parseFloat(priceInput?.value);
+            let weightQty = weightQtyInput?.value === '' ? NaN : parseFloat(weightQtyInput?.value);
+            let weightUnit = weightUnitSelect?.value;
+            let piecesQty = piecesQtyInput?.value === '' ? NaN : parseFloat(piecesQtyInput?.value);
+            
+            let perGram = null;
+            let perKg = null;
+            let perPiece = null;
+
+            let hasPrice = !isNaN(price) && price >= 0;
+            let hasWeight = !isNaN(weightQty) && weightQty > 0;
+            let hasPieces = !isNaN(piecesQty) && piecesQty > 0;
+
+            if (hasPrice && hasWeight) {
+                const grams = convertToGrams(weightQty, weightUnit);
+                if (grams !== null && grams > 0) {
+                    perGram = price / grams;
+                    perKg = perGram * 1000;
+                }
+            }
+            
+            if (hasPrice && hasPieces) {
+                perPiece = price / piecesQty;
+            }
+
+            if (perGram !== null && perKg !== null) {
+                resultPerGramSpan.innerText = perGram.toFixed(4);
+                resultPerKgSpan.innerText = perKg.toFixed(1);
+                results.push({ row, perKg, valid: true });
+            } else {
+                resultPerGramSpan.innerText = '—';
+                resultPerKgSpan.innerText = '—';
+                results.push({ row, perKg: Infinity, valid: false });
+            }
+            
+            if (perPiece !== null) {
+                resultPerPieceSpan.innerText = perPiece.toFixed(2);
+            } else {
+                resultPerPieceSpan.innerText = '—';
+            }
+        });
+
+        let minPerKg = Infinity;
+        results.forEach(r => {
+            if (r.valid && r.perKg < minPerKg) minPerKg = r.perKg;
+        });
+
+        results.forEach(r => {
+            if (r.valid && minPerKg !== Infinity && Math.abs(r.perKg - minPerKg) < 0.001) {
+                r.row.classList.add('best-price');
+            } else {
+                r.row.classList.remove('best-price');
+            }
+        });
+
+        saveToStorage();
+    }
+
+    function createRow(index, savedData = {}) {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'row';
+
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'row-header';
+        headerDiv.innerHTML = `
+            <span class="row-number">${index + 1}</span>
+            <button class="delete-row">✖</button>
+        `;
+        const deleteBtn = headerDiv.querySelector('.delete-row');
+        deleteBtn.addEventListener('click', () => removeRow(rowDiv));
+
+        const flexDiv = document.createElement('div');
+        flexDiv.className = 'flex-inputs';
+        flexDiv.innerHTML = `
+            <div class="price-box">
+                <label>💰 руб</label>
+                <input type="number" step="0.01" class="price-input" placeholder="0" value="${savedData.price || ''}">
+            </div>
+            <div class="weight-box">
+                <label>⚖️ вес</label>
+                <input type="number" step="any" class="weight-qty" value="${savedData.weightQty !== undefined ? savedData.weightQty : '100'}">
+            </div>
+            <div class="weight-unit-box">
+                <label>📏</label>
+                <select class="weight-unit">
+                    <option value="г" ${savedData.weightUnit === 'г' ? 'selected' : ''}>г</option>
+                    <option value="кг" ${savedData.weightUnit === 'кг' ? 'selected' : ''}>кг</option>
+                    <option value="мл" ${savedData.weightUnit === 'мл' ? 'selected' : ''}>мл</option>
+                    <option value="л" ${savedData.weightUnit === 'л' ? 'selected' : ''}>л</option>
+                </select>
+            </div>
+            <div class="pieces-box">
+                <label>🔢 шт</label>
+                <input type="number" step="any" class="pieces-qty" placeholder="1" value="${savedData.piecesQty || ''}">
+            </div>
+        `;
+
+        const resultDiv = document.createElement('div');
+        resultDiv.className = 'result';
+        resultDiv.innerHTML = `
+            <span>📉 1г/мл:</span> <span class="result-value result-per-gram">—</span>
+            <span>📈 1кг/л:</span> <span class="result-value result-per-kg">—</span>
+            <span>🔢 1шт:</span> <span class="result-value result-per-piece">—</span>
+        `;
+
+        rowDiv.appendChild(headerDiv);
+        rowDiv.appendChild(flexDiv);
+        rowDiv.appendChild(resultDiv);
+
+        const inputs = rowDiv.querySelectorAll('input, select');
+        inputs.forEach(el => {
+            el.addEventListener('input', () => updateAllResults());
+            el.addEventListener('change', () => updateAllResults());
+        });
+
+        return rowDiv;
+    }
+
+    function removeRow(rowElement) {
+        if (rows.length <= 1) {
+            alert('Должна быть хотя бы одна строка');
+            return;
+        }
+        const index = rows.indexOf(rowElement);
+        if (index !== -1) {
+            rowElement.remove();
+            rows.splice(index, 1);
+            renumberRows();
+            updateAllResults();
+        }
+    }
+
+    function renumberRows() {
+        rows.forEach((row, idx) => {
+            const span = row.querySelector('.row-number');
+            if (span) span.innerText = `${idx + 1}`;
+        });
+    }
+
+    function addNewRow(savedData = {}) {
+        if (rows.length >= MAX_ROWS) {
+            alert(`Максимум ${MAX_ROWS} продуктов`);
+            return false;
+        }
+        const newRow = createRow(rows.length, savedData);
+        document.getElementById('rowsContainer').appendChild(newRow);
+        rows.push(newRow);
+        renumberRows();
+        updateAllResults();
+        return true;
+    }
+
+    function resetAll() {
+        rows.forEach(row => {
+            const priceInput = row.querySelector('.price-input');
+            const weightQty = row.querySelector('.weight-qty');
+            const piecesQty = row.querySelector('.pieces-qty');
+            const weightUnit = row.querySelector('.weight-unit');
+            
+            if (priceInput) priceInput.value = '';
+            if (weightQty) weightQty.value = '100';  // Сбрасываем на 100
+            if (piecesQty) piecesQty.value = '';
+            if (weightUnit) weightUnit.value = 'г';
+        });
+        updateAllResults();
+    }
+
+    function keepFiveRows() {
+        if (rows.length <= 5) return;
+        const container = document.getElementById('rowsContainer');
+        const toKeep = rows.slice(0, 5);
+        while (container.firstChild) container.removeChild(container.firstChild);
+        toKeep.forEach(row => container.appendChild(row));
+        rows = toKeep;
+        renumberRows();
+        updateAllResults();
+    }
+
+    function init() {
+        const container = document.getElementById('rowsContainer');
+        container.innerHTML = '';
+        rows = [];
+
+        const saved = loadFromStorage();
+
+        if (saved && saved.length > 0) {
+            for (let i = 0; i < saved.length; i++) {
+                addNewRow(saved[i]);
+            }
+        } else {
+            addNewRow({ price: '135', weightQty: '100', weightUnit: 'г' });
+            addNewRow({ price: '300', weightQty: '300', weightUnit: 'г' });
+            addNewRow({ price: '950', weightQty: '1000', weightUnit: 'г' });
+            addNewRow({ price: '90', piecesQty: '10' });
+            addNewRow({ price: '200', weightQty: '150', weightUnit: 'г' });
+        }
+    }
+
+    document.getElementById('addRowBtn').addEventListener('click', () => addNewRow());
+    document.getElementById('resetAllBtn').addEventListener('click', resetAll);
+    document.getElementById('keepFiveBtn').addEventListener('click', keepFiveRows);
+
+    init();
+</script>
+</body>
+</html>
